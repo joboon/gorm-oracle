@@ -239,11 +239,11 @@ func (d Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v inter
 // Manages quoting of identifiers
 func (d Dialector) QuoteTo(writer clause.Writer, str string) {
 	out := str
-	if !d.SkipQuoteIdentifiers {
-		var builder strings.Builder
-		writeQuotedIdentifier(&builder, str)
-		out = builder.String()
-	}
+	// if !d.SkipQuoteIdentifiers {
+	// 	var builder strings.Builder
+	// 	writeQuotedIdentifier(&builder, str)
+	// 	out = builder.String()
+	// }
 	_, _ = writer.WriteString(out)
 }
 
