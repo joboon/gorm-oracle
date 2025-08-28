@@ -170,7 +170,7 @@ func convertValue(val interface{}) interface{} {
 	}
 
 	if v.Kind() == reflect.Ptr && v.IsNil() {
-		return nil
+		return val
 	}
 
 	switch v := val.(type) {
