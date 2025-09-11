@@ -46,6 +46,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -165,10 +166,10 @@ func convertValue(val interface{}) interface{} {
 	}
 
 	// Dereference pointers
-	v := reflect.ValueOf(val)
-	for v.Kind() == reflect.Ptr && !v.IsNil() {
-		v = v.Elem()
-		val = v.Interface()
+	rv := reflect.ValueOf(val)
+	for rv.Kind() == reflect.Ptr && !rv.IsNil() {
+		rv = rv.Elem()
+		val = rv.Interface()
 	}
 
 	switch v := val.(type) {
@@ -183,6 +184,13 @@ func convertValue(val interface{}) interface{} {
 		}
 		b := []byte(*v)
 		return b
+	case *uuid.UUID, *datatypes.UUID:
+		// Convert nil pointer to a UUID to empty string so that it is stored in the database as NULL
+		// rather than "00000000-0000-0000-0000-000000000000"
+		if rv.IsNil() {
+			return ""
+		}
+		return val
 	case bool:
 		if v {
 			return 1
