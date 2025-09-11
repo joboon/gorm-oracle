@@ -45,6 +45,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
@@ -170,7 +172,14 @@ func convertValue(val interface{}) interface{} {
 	}
 
 	if v.Kind() == reflect.Ptr && v.IsNil() {
-		return val
+		switch val.(type) {
+		case *uuid.UUID, *datatypes.UUID:
+			// Convert nil pointer to a UUID to empty string so that it is stored in the database as NULL
+			// rather than "00000000-0000-0000-0000-000000000000"
+			return ""
+		default:
+			return val
+		}
 	}
 
 	switch v := val.(type) {
