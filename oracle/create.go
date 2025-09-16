@@ -520,7 +520,7 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 							"  IF l_affected_records.COUNT > %d THEN :%d := l_affected_records(%d).",
 							rowIdx, outParamIndex+1, rowIdx+1,
 						))
-						writeQuotedIdentifier(&plsqlBuilder, column)
+						db.QuoteTo(&plsqlBuilder, column)
 						plsqlBuilder.WriteString("; END IF;\n")
 					} else {
 						// datatypes.JSON (text-based) -> serialize to CLOB
@@ -529,13 +529,13 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 							"  IF l_affected_records.COUNT > %d THEN :%d := JSON_SERIALIZE(l_affected_records(%d).",
 							rowIdx, outParamIndex+1, rowIdx+1,
 						))
-						writeQuotedIdentifier(&plsqlBuilder, column)
+						db.QuoteTo(&plsqlBuilder, column)
 						plsqlBuilder.WriteString(" RETURNING CLOB); END IF;\n")
 					}
 				} else {
 					stmt.Vars = append(stmt.Vars, sql.Out{Dest: createTypedDestination(field)})
 					plsqlBuilder.WriteString(fmt.Sprintf("  IF l_affected_records.COUNT > %d THEN :%d := l_affected_records(%d).", rowIdx, outParamIndex+1, rowIdx+1))
-					writeQuotedIdentifier(&plsqlBuilder, column)
+					db.QuoteTo(&plsqlBuilder, column)
 					plsqlBuilder.WriteString("; END IF;\n")
 				}
 				outParamIndex++
