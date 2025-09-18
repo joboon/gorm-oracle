@@ -398,6 +398,8 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 				schema.PrioritizedPrimaryField.AutoIncrement &&
 				strings.EqualFold(schema.PrioritizedPrimaryField.DBName, column.Name) {
 				isAutoIncrement = true
+			} else if stmt.Schema.LookUpField(column.Name).AutoIncrement {
+				isAutoIncrement = true
 			}
 
 			if !isConflictColumn && !isAutoIncrement {
@@ -695,6 +697,8 @@ func shouldIncludeColumnInInsert(stmt *gorm.Statement, columnName string) bool {
 	if stmt.Schema.PrioritizedPrimaryField != nil &&
 		stmt.Schema.PrioritizedPrimaryField.AutoIncrement &&
 		strings.EqualFold(stmt.Schema.PrioritizedPrimaryField.DBName, columnName) {
+		return false
+	} else if stmt.Schema.LookUpField(columnName).AutoIncrement {
 		return false
 	}
 	return true
