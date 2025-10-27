@@ -41,6 +41,7 @@ package oracle
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -253,6 +254,12 @@ func convertValue(val interface{}) interface{} {
 			return godror.Lob{IsClob: false, Reader: bytes.NewReader(v)}
 		}
 		return v
+	case driver.Valuer:
+		unwrappedValue, err := v.Value()
+		if err != nil {
+			return val
+		}
+		return convertValue(unwrappedValue)
 	default:
 		return val
 	}
