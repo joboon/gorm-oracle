@@ -94,7 +94,7 @@ func getOracleArrayType(field *schema.Field, values []any) string {
 	case "clob":
 		return "TABLE OF CLOB"
 	default:
-		return "TABLE OF " + strings.ToUpper(string(field.DataType))
+		return "TABLE OF VARCHAR2(4000)"
 	}
 }
 
