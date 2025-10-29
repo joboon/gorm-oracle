@@ -44,6 +44,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/godror/godror"
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
@@ -131,7 +132,18 @@ func Create(db *gorm.DB) {
 		hasReturningInDryRun := db.DryRun && hasReturningClause
 		needsReturning := stmtSchema != nil && len(stmtSchema.FieldsWithDefaultDBValue) > 0 && (!db.DryRun || hasReturningInDryRun)
 
-		if needsReturning && len(createValues.Values) > 1 {
+		// Check if we need to build PL/SQL for bulk inserts/merges with LOB
+		hasLOB := false
+		for _, values := range createValues.Values {
+			for _, val := range values {
+				v := convertValue(val)
+				if _, ok := v.(godror.Lob); ok {
+					hasLOB = true
+				}
+			}
+		}
+
+		if (needsReturning || hasLOB) && len(createValues.Values) > 1 {
 			// Multiple rows with RETURNING - use PL/SQL
 			buildBulkInsertPLSQL(db, createValues)
 		} else if needsReturning {
@@ -284,6 +296,7 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 
 	// Use filtered conflict columns from here on
 	conflictColumns = filteredConflictColumns
+	forceLobBind := false
 
 	var plsqlBuilder strings.Builder
 
@@ -301,6 +314,10 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 			arrayType = "TABLE OF VARCHAR2(4000)"
 		}
 
+		if arrayType == "TABLE OF BLOB" || arrayType == "TABLE OF CLOB" {
+			forceLobBind = true
+		}
+
 		plsqlBuilder.WriteString(fmt.Sprintf("  TYPE t_col_%d_array IS %s;\n", i, arrayType))
 		plsqlBuilder.WriteString(fmt.Sprintf("  l_col_%d_array t_col_%d_array;\n", i, i))
 	}
@@ -315,7 +332,7 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 				plsqlBuilder.WriteString(", ")
 			}
 			plsqlBuilder.WriteString(fmt.Sprintf(":%d", len(stmt.Vars)+1))
-			stmt.Vars = append(stmt.Vars, convertValue(values[i]))
+			stmt.Vars = append(stmt.Vars, convertValueWithOverrides(values[i], forceLobBind))
 		}
 		plsqlBuilder.WriteString(");\n")
 	}
@@ -535,7 +552,18 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 						plsqlBuilder.WriteString(" RETURNING CLOB); END IF;\n")
 					}
 				} else {
-					stmt.Vars = append(stmt.Vars, sql.Out{Dest: createTypedDestination(field)})
+					fieldType := createTypedDestination(field)
+					switch fieldType.(type) {
+					case *[]uint8:
+						if forceLobBind {
+							fieldType = &godror.Lob{IsClob: false}
+						}
+					case *string:
+						if forceLobBind {
+							fieldType = &godror.Lob{IsClob: true}
+						}
+					}
+					stmt.Vars = append(stmt.Vars, sql.Out{Dest: fieldType})
 					plsqlBuilder.WriteString(fmt.Sprintf("  IF l_affected_records.COUNT > %d THEN :%d := l_affected_records(%d).", rowIdx, outParamIndex+1, rowIdx+1))
 					db.QuoteTo(&plsqlBuilder, column)
 					plsqlBuilder.WriteString("; END IF;\n")
@@ -569,6 +597,7 @@ func buildBulkInsertOnlyPLSQL(db *gorm.DB, createValues clause.Values) {
 	schema := stmt.Schema
 
 	var plsqlBuilder strings.Builder
+	forceLobBind := false
 
 	// Start PL/SQL block
 	plsqlBuilder.WriteString("DECLARE\n")
@@ -582,6 +611,10 @@ func buildBulkInsertOnlyPLSQL(db *gorm.DB, createValues clause.Values) {
 			arrayType = getOracleArrayType(field, pluck(createValues.Values, i))
 		} else {
 			arrayType = "TABLE OF VARCHAR2(4000)"
+		}
+
+		if arrayType == "TABLE OF BLOB" || arrayType == "TABLE OF CLOB" {
+			forceLobBind = true
 		}
 
 		plsqlBuilder.WriteString(fmt.Sprintf("  TYPE t_col_%d_array IS %s;\n", i, arrayType))
@@ -598,7 +631,7 @@ func buildBulkInsertOnlyPLSQL(db *gorm.DB, createValues clause.Values) {
 				plsqlBuilder.WriteString(", ")
 			}
 			plsqlBuilder.WriteString(fmt.Sprintf(":%d", len(stmt.Vars)+1))
-			stmt.Vars = append(stmt.Vars, convertValue(values[i]))
+			stmt.Vars = append(stmt.Vars, convertValueWithOverrides(values[i], forceLobBind))
 		}
 		plsqlBuilder.WriteString(");\n")
 	}
@@ -663,7 +696,18 @@ func buildBulkInsertOnlyPLSQL(db *gorm.DB, createValues clause.Values) {
 						))
 					}
 				} else {
-					stmt.Vars = append(stmt.Vars, sql.Out{Dest: createTypedDestination(field)})
+					fieldType := createTypedDestination(field)
+					switch fieldType.(type) {
+					case *[]uint8:
+						if forceLobBind {
+							fieldType = &godror.Lob{IsClob: false}
+						}
+					case *string:
+						if forceLobBind {
+							fieldType = &godror.Lob{IsClob: true}
+						}
+					}
+					stmt.Vars = append(stmt.Vars, sql.Out{Dest: fieldType})
 					plsqlBuilder.WriteString(fmt.Sprintf(
 						"  IF l_inserted_records.COUNT > %d THEN :%d := l_inserted_records(%d).%s; END IF;\n",
 						rowIdx, outParamIndex+1, rowIdx+1, quotedColumn,

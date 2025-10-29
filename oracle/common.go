@@ -80,8 +80,19 @@ func getOracleArrayType(field *schema.Field, values []any) string {
 		return "TABLE OF VARCHAR2(4000)"
 	case schema.Time:
 		return "TABLE OF TIMESTAMP WITH TIME ZONE"
-	case schema.Bytes:
+	case "[]byte":
+		for _, value := range values {
+			if b, ok := value.([]byte); ok {
+				if len(b) > 4000 {
+					return "TABLE OF BLOB"
+				}
+			}
+		}
+		return "TABLE OF VARCHAR2(4000)"
+	case schema.Bytes, "blob":
 		return "TABLE OF BLOB"
+	case "clob":
+		return "TABLE OF CLOB"
 	default:
 		return "TABLE OF " + strings.ToUpper(string(field.DataType))
 	}
@@ -200,14 +211,23 @@ func createTypedDestination(f *schema.Field) interface{} {
 
 	case reflect.Float32, reflect.Float64:
 		return new(float64)
+
+	case reflect.Slice:
+		if ft.Elem().Kind() == reflect.Uint8 { // []byte
+			return new([]byte)
+		}
 	}
 
 	// Fallback
 	return new(string)
 }
 
-// Convert values for Oracle-specific types
 func convertValue(val interface{}) interface{} {
+	return convertValueWithOverrides(val, false)
+}
+
+// Convert values for Oracle-specific types
+func convertValueWithOverrides(val interface{}, forceLobBind bool) interface{} {
 	if val == nil {
 		return nil
 	}
@@ -217,6 +237,10 @@ func convertValue(val interface{}) interface{} {
 	for rv.Kind() == reflect.Ptr && !rv.IsNil() {
 		rv = rv.Elem()
 		val = rv.Interface()
+	}
+	isNil := false
+	if rv.Kind() == reflect.Ptr && rv.IsNil() {
+		isNil = true
 	}
 
 	switch v := val.(type) {
@@ -234,7 +258,7 @@ func convertValue(val interface{}) interface{} {
 	case *uuid.UUID, *datatypes.UUID:
 		// Convert nil pointer to a UUID to empty string so that it is stored in the database as NULL
 		// rather than "00000000-0000-0000-0000-000000000000"
-		if rv.IsNil() {
+		if isNil {
 			return ""
 		}
 		return val
@@ -250,16 +274,19 @@ func convertValue(val interface{}) interface{} {
 		}
 		return v
 	case []byte:
-		if len(v) > math.MaxInt16 {
+		if len(v) > math.MaxInt16 || forceLobBind {
 			return godror.Lob{IsClob: false, Reader: bytes.NewReader(v)}
 		}
 		return v
 	case driver.Valuer:
+		if v == nil || isNil {
+			return val
+		}
 		unwrappedValue, err := v.Value()
 		if err != nil {
 			return val
 		}
-		return convertValue(unwrappedValue)
+		return convertValueWithOverrides(unwrappedValue, forceLobBind)
 	default:
 		return val
 	}
@@ -285,6 +312,18 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 	isPtr := field.FieldType.Kind() == reflect.Ptr
 	if isPtr {
 		targetType = field.FieldType.Elem()
+	}
+
+	if v, ok := value.(godror.Lob); ok {
+		length, err := v.Size()
+		if err != nil {
+			return nil
+		}
+		b := make([]byte, length)
+		converted, err = v.Read(b)
+		if err != nil {
+			return nil
+		}
 	}
 
 	switch targetType {
