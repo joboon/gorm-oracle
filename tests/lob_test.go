@@ -39,6 +39,9 @@
 package tests
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -61,6 +64,11 @@ type ClobSingleModel struct {
 	Data string `gorm:"type:clob"`
 }
 
+type BlobJSONModel struct {
+	Blah string       `gorm:"primaryKey"`
+	Data AttributeMap `gorm:"type:clob"`
+}
+
 type BlobOneToManyModel struct {
 	ID       uint             `gorm:"primaryKey"`
 	Children []BlobChildModel `gorm:"foreignKey:ParentID"`
@@ -77,12 +85,56 @@ type BlobSingleModel struct {
 	Data []byte `gorm:"type:blob"`
 }
 
+func scanBytes(src interface{}) ([]byte, bool) {
+	if stringer, ok := src.(fmt.Stringer); ok {
+		return []byte(stringer.String()), true
+	}
+	bytes, ok := src.([]byte)
+	if !ok {
+		return nil, false
+	}
+	return bytes, true
+}
+
+type AttributeMap map[string]interface{}
+
+func (a AttributeMap) Value() (driver.Value, error) {
+	attrs := a
+	if attrs == nil {
+		attrs = AttributeMap{}
+	}
+	value, err := json.Marshal(attrs)
+	return string(value), err
+}
+
+func (a *AttributeMap) Scan(src interface{}) error {
+	bytes, ok := scanBytes(src)
+	if !ok {
+		return fmt.Errorf("failed to scan attribute map")
+	}
+	var raw interface{}
+	err := json.Unmarshal(bytes, &raw)
+	if err != nil {
+		return err
+	}
+
+	if raw == nil {
+		*a = map[string]interface{}{}
+		return nil
+	}
+	*a, ok = raw.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("failed to convert attribute map from json")
+	}
+	return nil
+}
+
 func setupLobTestTables(t *testing.T) {
 	t.Log("Setting up LOB test tables")
 
-	DB.Migrator().DropTable(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
+	DB.Migrator().DropTable(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{}, &BlobJSONModel{})
 
-	err := DB.AutoMigrate(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
+	err := DB.AutoMigrate(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{}, &BlobJSONModel{})
 	if err != nil {
 		t.Fatalf("Failed to migrate LOB test tables: %v", err)
 	}
@@ -150,6 +202,55 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					ID:   2,
 					Data: strings.Repeat("Y", 3),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupLobTestTables(t)
+			err := tc.fn(tc.model)
+			if err != nil {
+				t.Fatalf("Failed to create CLOB record with ON CONFLICT: %v", err)
+			}
+		})
+	}
+}
+
+func TestJSONBAsCLOB(t *testing.T) {
+	type test struct {
+		model any
+		fn    func(model any) error
+	}
+	tests := map[string]test{
+		// "Single": {
+		// 	model: []BlobJSONModel{
+		// 		{
+		// 			ID:   1,
+		// 			Data: AttributeMap{"Data": strings.Repeat("X", 3)},
+		// 		},
+		// 	},
+		// 	fn: func(model any) error {
+		// 		return DB.Clauses(clause.OnConflict{
+		// 			UpdateAll: true,
+		// 		}).CreateInBatches(model, 1000).Error
+		// 	},
+		// },
+		"SingleBatch": {
+			model: []BlobJSONModel{
+				{
+					Blah: "1",
+					Data: AttributeMap{"Data": strings.Repeat("X", 32768)},
+				},
+				{
+					Blah: "2",
+					Data: AttributeMap{"Data": strings.Repeat("Y", 3)},
 				},
 			},
 			fn: func(model any) error {

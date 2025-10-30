@@ -43,8 +43,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
-	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -58,44 +56,28 @@ import (
 
 // Helper function to get Oracle array type for a field
 func getOracleArrayType(field *schema.Field, values []any) string {
-	switch field.DataType {
-	case schema.Bool:
-		return "TABLE OF NUMBER(1)"
-	case schema.Int, schema.Uint:
-		return "TABLE OF NUMBER"
-	case schema.Float:
-		return "TABLE OF NUMBER"
-	case schema.String:
-		if field.Size > 0 && field.Size <= 4000 {
-			return fmt.Sprintf("TABLE OF VARCHAR2(%d)", field.Size)
-		} else {
-			for _, value := range values {
-				if strValue, ok := value.(string); ok {
-					if len(strValue) > 4000 {
-						return "TABLE OF CLOB"
-					}
-				}
+	arrayType := "TABLE OF VARCHAR2(4000)"
+	for _, val := range values {
+		convertedValue := convertValue(val)
+		if convertedValue == nil {
+			continue
+		}
+		switch convertedValue := convertedValue.(type) {
+		case bool:
+			arrayType = "TABLE OF NUMBER(1)"
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			arrayType = "TABLE OF NUMBER"
+		case time.Time:
+			arrayType = "TABLE OF TIMESTAMP WITH TIME ZONE"
+		case godror.Lob:
+			if convertedValue.IsClob {
+				return "TABLE OF CLOB"
+			} else {
+				return "TABLE OF BLOB"
 			}
 		}
-		return "TABLE OF VARCHAR2(4000)"
-	case schema.Time:
-		return "TABLE OF TIMESTAMP WITH TIME ZONE"
-	case "[]byte":
-		for _, value := range values {
-			if b, ok := value.([]byte); ok {
-				if len(b) > 4000 {
-					return "TABLE OF BLOB"
-				}
-			}
-		}
-		return "TABLE OF VARCHAR2(4000)"
-	case schema.Bytes, "blob":
-		return "TABLE OF BLOB"
-	case "clob":
-		return "TABLE OF CLOB"
-	default:
-		return "TABLE OF VARCHAR2(4000)"
 	}
+	return arrayType
 }
 
 // Helper function to get all column names for a table
@@ -269,12 +251,12 @@ func convertValueWithOverrides(val interface{}, forceLobBind bool) interface{} {
 			return 0
 		}
 	case string:
-		if len(v) > math.MaxInt16 {
+		if len(v) > 4000 || forceLobBind {
 			return godror.Lob{IsClob: true, Reader: strings.NewReader(v)}
 		}
 		return v
 	case []byte:
-		if len(v) > math.MaxInt16 || forceLobBind {
+		if len(v) > 4000 || forceLobBind {
 			return godror.Lob{IsClob: false, Reader: bytes.NewReader(v)}
 		}
 		return v
