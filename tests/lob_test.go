@@ -66,7 +66,7 @@ type ClobSingleModel struct {
 
 type BlobJSONModel struct {
 	Blah string       `gorm:"primaryKey"`
-	Data AttributeMap `gorm:"type:clob"`
+	Data AttributeMap `gorm:"type:json"`
 }
 
 type BlobOneToManyModel struct {
@@ -104,7 +104,7 @@ func (a AttributeMap) Value() (driver.Value, error) {
 		attrs = AttributeMap{}
 	}
 	value, err := json.Marshal(attrs)
-	return string(value), err
+	return value, err
 }
 
 func (a *AttributeMap) Scan(src interface{}) error {
@@ -229,19 +229,19 @@ func TestJSONBAsCLOB(t *testing.T) {
 		fn    func(model any) error
 	}
 	tests := map[string]test{
-		// "Single": {
-		// 	model: []BlobJSONModel{
-		// 		{
-		// 			ID:   1,
-		// 			Data: AttributeMap{"Data": strings.Repeat("X", 3)},
-		// 		},
-		// 	},
-		// 	fn: func(model any) error {
-		// 		return DB.Clauses(clause.OnConflict{
-		// 			UpdateAll: true,
-		// 		}).CreateInBatches(model, 1000).Error
-		// 	},
-		// },
+		"Single": {
+			model: []BlobJSONModel{
+				{
+					Blah: "1",
+					Data: AttributeMap{"Data": strings.Repeat("X", 3)},
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
 		"SingleBatch": {
 			model: []BlobJSONModel{
 				{

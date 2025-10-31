@@ -534,7 +534,7 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 				if isJSONField(field) {
 					if isRawMessageField(field) {
 						// Column is a BLOB, return raw bytes; no JSON_SERIALIZE
-						stmt.Vars = append(stmt.Vars, sql.Out{Dest: new([]byte)})
+						stmt.Vars = append(stmt.Vars, sql.Out{Dest: &godror.Lob{IsClob: false}})
 						plsqlBuilder.WriteString(fmt.Sprintf(
 							"  IF l_affected_records.COUNT > %d THEN :%d := l_affected_records(%d).",
 							rowIdx, outParamIndex+1, rowIdx+1,
@@ -543,7 +543,7 @@ func buildBulkMergePLSQL(db *gorm.DB, createValues clause.Values, onConflictClau
 						plsqlBuilder.WriteString("; END IF;\n")
 					} else {
 						// datatypes.JSON (text-based) -> serialize to CLOB
-						stmt.Vars = append(stmt.Vars, sql.Out{Dest: new(string)})
+						stmt.Vars = append(stmt.Vars, sql.Out{Dest: &godror.Lob{IsClob: true}})
 						plsqlBuilder.WriteString(fmt.Sprintf(
 							"  IF l_affected_records.COUNT > %d THEN :%d := JSON_SERIALIZE(l_affected_records(%d).",
 							rowIdx, outParamIndex+1, rowIdx+1,
@@ -682,14 +682,14 @@ func buildBulkInsertOnlyPLSQL(db *gorm.DB, createValues clause.Values) {
 				if isJSONField(field) {
 					if isRawMessageField(field) {
 						// Column is a BLOB, return raw bytes; no JSON_SERIALIZE
-						stmt.Vars = append(stmt.Vars, sql.Out{Dest: new([]byte)})
+						stmt.Vars = append(stmt.Vars, sql.Out{Dest: &godror.Lob{IsClob: false}})
 						plsqlBuilder.WriteString(fmt.Sprintf(
 							"  IF l_inserted_records.COUNT > %d THEN :%d := l_inserted_records(%d).%s; END IF;\n",
 							rowIdx, outParamIndex+1, rowIdx+1, quotedColumn,
 						))
 					} else {
 						// datatypes.JSON (text-based) -> serialize to CLOB
-						stmt.Vars = append(stmt.Vars, sql.Out{Dest: new(string)})
+						stmt.Vars = append(stmt.Vars, sql.Out{Dest: &godror.Lob{IsClob: true}})
 						plsqlBuilder.WriteString(fmt.Sprintf(
 							"  IF l_inserted_records.COUNT > %d THEN :%d := JSON_SERIALIZE(l_inserted_records(%d).%s RETURNING CLOB); END IF;\n",
 							rowIdx, outParamIndex+1, rowIdx+1, quotedColumn,

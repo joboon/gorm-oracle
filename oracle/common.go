@@ -411,6 +411,10 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 }
 
 func isJSONField(f *schema.Field) bool {
+	if f.DataType == "json" || f.DataType == "jsonb" {
+		return true
+	}
+
 	_rawMsgT := reflect.TypeOf(json.RawMessage{})
 	_gormJSON := reflect.TypeOf(datatypes.JSON{})
 	if f == nil {
