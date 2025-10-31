@@ -57,7 +57,7 @@ type ClobChildModel struct {
 }
 
 type ClobSingleModel struct {
-	ID   uint   `gorm:"primaryKey"`
+	Blah string `gorm:"primaryKey"`
 	Data string `gorm:"type:clob"`
 }
 
@@ -131,7 +131,7 @@ func TestClobOnConflict(t *testing.T) {
 		"Single": {
 			model: []ClobSingleModel{
 				{
-					ID:   1,
+					Blah: "1",
 					Data: strings.Repeat("X", 32768),
 				},
 			},
@@ -144,11 +144,11 @@ func TestClobOnConflict(t *testing.T) {
 		"SingleBatch": {
 			model: []ClobSingleModel{
 				{
-					ID:   1,
+					Blah: "1",
 					Data: strings.Repeat("X", 32768),
 				},
 				{
-					ID:   2,
+					Blah: "2",
 					Data: strings.Repeat("Y", 3),
 				},
 			},
@@ -249,5 +249,29 @@ func TestBlobOnConflict(t *testing.T) {
 				t.Fatalf("Failed to create BLOB record with ON CONFLICT: %v", err)
 			}
 		})
+	}
+}
+
+func TestClobUpdateOnConflict(t *testing.T) {
+	setupLobTestTables(t)
+	model := []ClobSingleModel{
+		{
+			Blah: "1",
+			Data: strings.Repeat("X", 32768),
+		},
+		{
+			Blah: "2",
+			Data: strings.Repeat("Y", 3),
+		},
+	}
+
+	err := DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(model, 1000).Error
+	if err != nil {
+		t.Fatalf("Failed to create CLOB record with ON CONFLICT: %v", err)
+	}
+	model[1].Data = strings.Repeat("Z", 5000)
+	err = DB.Clauses(clause.OnConflict{UpdateAll: true}).CreateInBatches(model, 1000).Error
+	if err != nil {
+		t.Fatalf("Failed to update CLOB record with ON CONFLICT: %v", err)
 	}
 }
