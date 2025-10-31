@@ -120,6 +120,10 @@ func createTypedDestination(f *schema.Field) interface{} {
 		return new(string)
 	}
 
+	if f.DataType == "boolean" {
+		return new(bool)
+	}
+
 	// If the field has a serializer, the field type may not be directly related to the column type in the database.
 	// In this case, determine the destination type using the field's data type, which is the column type in the
 	// database.

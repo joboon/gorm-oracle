@@ -970,11 +970,6 @@ func TestCustomJSON(t *testing.T) {
 		Data AttributeMap `gorm:"type:json"`
 	}
 
-	DB.Migrator().DropTable(&CustomJSONModel{})
-	if err := DB.Set("gorm:table_options", "TABLESPACE SYSAUX").AutoMigrate(&CustomJSONModel{}); err != nil {
-		t.Fatalf("migrate failed: %v", err)
-	}
-
 	type test struct {
 		model any
 		fn    func(model any) error
@@ -1014,7 +1009,10 @@ func TestCustomJSON(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			setupLobTestTables(t)
+			DB.Migrator().DropTable(&CustomJSONModel{})
+			if err := DB.Set("gorm:table_options", "TABLESPACE SYSAUX").AutoMigrate(&CustomJSONModel{}); err != nil {
+				t.Fatalf("migrate failed: %v", err)
+			}
 			err := tc.fn(tc.model)
 			if err != nil {
 				t.Fatalf("Failed to create CLOB record with ON CONFLICT: %v", err)
