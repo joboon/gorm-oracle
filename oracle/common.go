@@ -43,6 +43,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -51,18 +52,18 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
 )
 
 // Helper function to get Oracle array type for a field
-func getOracleArrayType(field *schema.Field, values []any) string {
+func getOracleArrayType(values []any) string {
 	arrayType := "TABLE OF VARCHAR2(4000)"
 	for _, val := range values {
-		convertedValue := convertValue(val)
-		if convertedValue == nil {
+		if val == nil {
 			continue
 		}
-		switch convertedValue := convertedValue.(type) {
+		switch v := val.(type) {
 		case bool:
 			arrayType = "TABLE OF NUMBER(1)"
 		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
@@ -70,10 +71,20 @@ func getOracleArrayType(field *schema.Field, values []any) string {
 		case time.Time:
 			arrayType = "TABLE OF TIMESTAMP WITH TIME ZONE"
 		case godror.Lob:
-			if convertedValue.IsClob {
+			if v.IsClob {
 				return "TABLE OF CLOB"
 			} else {
 				return "TABLE OF BLOB"
+			}
+		case []byte:
+			// Store byte slices longer than 4000 bytes as BLOB
+			if len(v) > 4000 {
+				return "TABLE OF BLOB"
+			}
+		case string:
+			// Store strings longer than 4000 characters as CLOB
+			if len(v) > 4000 {
+				return "TABLE OF CLOB"
 			}
 		}
 	}
@@ -120,6 +131,8 @@ func createTypedDestination(f *schema.Field) interface{} {
 		return new(string)
 	}
 
+	// To differentiate between bool fields stored as NUMBER(1) and bool fields stored as actual BOOLEAN type,
+	// check the struct's "type" tag.
 	if f.DataType == "boolean" {
 		return new(bool)
 	}
@@ -209,11 +222,6 @@ func createTypedDestination(f *schema.Field) interface{} {
 }
 
 func convertValue(val interface{}) interface{} {
-	return convertValueWithOverrides(val, false)
-}
-
-// Convert values for Oracle-specific types
-func convertValueWithOverrides(val interface{}, forceLobBind bool) interface{} {
 	if val == nil {
 		return nil
 	}
@@ -255,16 +263,20 @@ func convertValueWithOverrides(val interface{}, forceLobBind bool) interface{} {
 			return 0
 		}
 	case string:
-		if len(v) > 4000 || forceLobBind {
+		// Store strings longer than 32767 characters as CLOB
+		if len(v) > math.MaxInt16 {
 			return godror.Lob{IsClob: true, Reader: strings.NewReader(v)}
 		}
 		return v
 	case []byte:
-		if len(v) > 4000 || forceLobBind {
+		// Store byte slices longer than 32767 bytes as BLOB
+		if len(v) > math.MaxInt16 {
 			return godror.Lob{IsClob: false, Reader: bytes.NewReader(v)}
 		}
 		return v
 	case driver.Valuer:
+		// Unwrap driver.Valuer to its underlying type by recursing into
+		// convertValue until we get a non-Valuer type
 		if v == nil || isNil {
 			return val
 		}
@@ -272,7 +284,10 @@ func convertValueWithOverrides(val interface{}, forceLobBind bool) interface{} {
 		if err != nil {
 			return val
 		}
-		return convertValueWithOverrides(unwrappedValue, forceLobBind)
+		return convertValue(unwrappedValue)
+	case clause.Expr:
+		// If we get a clause.Expr, convert it to nil; it should be handled elsewhere
+		return nil
 	default:
 		return val
 	}
@@ -300,6 +315,7 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 		targetType = field.FieldType.Elem()
 	}
 
+	// When PL/SQL LOBs are returned, unserialize their content
 	if v, ok := value.(godror.Lob); ok {
 		length, err := v.Size()
 		if err != nil {
@@ -415,6 +431,8 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 }
 
 func isJSONField(f *schema.Field) bool {
+	// Support detecting JSON fields through the struct's "type" tag.
+	// Also support jsonb for compatibility with other databases.
 	if f.DataType == "json" || f.DataType == "jsonb" {
 		return true
 	}

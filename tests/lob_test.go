@@ -141,6 +141,19 @@ func TestClobOnConflict(t *testing.T) {
 				}).CreateInBatches(model, 1000).Error
 			},
 		},
+		"SingleNotQuiteLOB": {
+			model: []ClobSingleModel{
+				{
+					Blah: "1",
+					Data: strings.Repeat("X", 32767),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
 		"SingleBatch": {
 			model: []ClobSingleModel{
 				{
@@ -150,6 +163,40 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "2",
 					Data: strings.Repeat("Y", 3),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+		"SingleBatchNotQuiteLOB": {
+			model: []ClobSingleModel{
+				{
+					Blah: "1",
+					Data: strings.Repeat("X", 32767),
+				},
+				{
+					Blah: "2",
+					Data: strings.Repeat("Y", 3),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+		"SingleBatchReverse": {
+			model: []ClobSingleModel{
+				{
+					Blah: "1",
+					Data: strings.Repeat("Y", 3),
+				},
+				{
+					Blah: "2",
+					Data: strings.Repeat("X", 32768),
 				},
 			},
 			fn: func(model any) error {
@@ -222,6 +269,19 @@ func TestBlobOnConflict(t *testing.T) {
 				}).CreateInBatches(model, 1000).Error
 			},
 		},
+		"SingleNotQuiteLOB": {
+			model: []BlobSingleModel{
+				{
+					ID:   1,
+					Data: []byte(strings.Repeat("X", 32767)),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
 		"SingleBatch": {
 			model: []BlobSingleModel{
 				{
@@ -231,6 +291,40 @@ func TestBlobOnConflict(t *testing.T) {
 				{
 					ID:   2,
 					Data: []byte(strings.Repeat("Y", 3)),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+		"SingleBatchNotQuiteLOB": {
+			model: []BlobSingleModel{
+				{
+					ID:   1,
+					Data: []byte(strings.Repeat("X", 32767)),
+				},
+				{
+					ID:   2,
+					Data: []byte(strings.Repeat("Y", 3)),
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+		"SingleBatchReverse": {
+			model: []BlobSingleModel{
+				{
+					ID:   1,
+					Data: []byte(strings.Repeat("Y", 3)),
+				},
+				{
+					ID:   2,
+					Data: []byte(strings.Repeat("X", 32768)),
 				},
 			},
 			fn: func(model any) error {
