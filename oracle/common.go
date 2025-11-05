@@ -360,6 +360,16 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 		default:
 			converted = value
 		}
+	case reflect.TypeOf(uuid.UUID{}), reflect.TypeOf(datatypes.UUID{}):
+		uuidStr, ok := value.(string)
+		if !ok {
+			return nil
+		}
+		parsed, err := uuid.Parse(uuidStr)
+		if err != nil {
+			return nil
+		}
+		converted = parsed
 
 	case reflect.TypeOf(time.Time{}):
 		switch vv := value.(type) {

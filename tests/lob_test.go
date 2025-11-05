@@ -42,6 +42,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm/clause"
 )
 
@@ -57,8 +58,9 @@ type ClobChildModel struct {
 }
 
 type ClobSingleModel struct {
-	Blah string `gorm:"primaryKey"`
-	Data string `gorm:"type:clob"`
+	Blah string     `gorm:"primaryKey"`
+	Data string     `gorm:"type:clob"`
+	UUID *uuid.UUID `gorm:"type:VARCHAR2(36)"`
 }
 
 type BlobOneToManyModel struct {
@@ -91,6 +93,7 @@ func setupLobTestTables(t *testing.T) {
 }
 
 func TestClobOnConflict(t *testing.T) {
+	uuid := uuid.New()
 	type test struct {
 		model any
 		fn    func(model any) error
@@ -133,6 +136,7 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "1",
 					Data: strings.Repeat("X", 32768),
+					UUID: nil,
 				},
 			},
 			fn: func(model any) error {
@@ -146,6 +150,7 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "1",
 					Data: strings.Repeat("X", 32767),
+					UUID: nil,
 				},
 			},
 			fn: func(model any) error {
@@ -159,10 +164,12 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "1",
 					Data: strings.Repeat("X", 32768),
+					UUID: nil,
 				},
 				{
 					Blah: "2",
 					Data: strings.Repeat("Y", 3),
+					UUID: &uuid,
 				},
 			},
 			fn: func(model any) error {
@@ -176,10 +183,12 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "1",
 					Data: strings.Repeat("X", 32767),
+					UUID: nil,
 				},
 				{
 					Blah: "2",
 					Data: strings.Repeat("Y", 3),
+					UUID: &uuid,
 				},
 			},
 			fn: func(model any) error {
@@ -193,10 +202,12 @@ func TestClobOnConflict(t *testing.T) {
 				{
 					Blah: "1",
 					Data: strings.Repeat("Y", 3),
+					UUID: nil,
 				},
 				{
 					Blah: "2",
 					Data: strings.Repeat("X", 32768),
+					UUID: &uuid,
 				},
 			},
 			fn: func(model any) error {
