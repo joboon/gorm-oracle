@@ -43,7 +43,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -264,13 +263,13 @@ func convertValue(val interface{}) interface{} {
 		}
 	case string:
 		// Store strings longer than 32767 characters as CLOB
-		if len(v) > math.MaxInt16 {
+		if len(v) > 4000 {
 			return godror.Lob{IsClob: true, Reader: strings.NewReader(v)}
 		}
 		return v
 	case []byte:
 		// Store byte slices longer than 32767 bytes as BLOB
-		if len(v) > math.MaxInt16 {
+		if len(v) > 4000 {
 			return godror.Lob{IsClob: false, Reader: bytes.NewReader(v)}
 		}
 		return v
