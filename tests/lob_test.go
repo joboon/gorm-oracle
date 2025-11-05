@@ -63,6 +63,11 @@ type ClobSingleModel struct {
 	UUID *uuid.UUID `gorm:"type:VARCHAR2(36)"`
 }
 
+type ClobSingleNilModel struct {
+	Blah string  `gorm:"primaryKey"`
+	Data *string `gorm:"type:clob"`
+}
+
 type BlobOneToManyModel struct {
 	ID       uint             `gorm:"primaryKey"`
 	Children []BlobChildModel `gorm:"foreignKey:ParentID"`
@@ -82,9 +87,9 @@ type BlobSingleModel struct {
 func setupLobTestTables(t *testing.T) {
 	t.Log("Setting up LOB test tables")
 
-	DB.Migrator().DropTable(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
+	DB.Migrator().DropTable(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &ClobSingleNilModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
 
-	err := DB.AutoMigrate(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
+	err := DB.AutoMigrate(&ClobOneToManyModel{}, &ClobChildModel{}, &ClobSingleModel{}, &ClobSingleNilModel{}, &BlobOneToManyModel{}, &BlobChildModel{}, &BlobSingleModel{})
 	if err != nil {
 		t.Fatalf("Failed to migrate LOB test tables: %v", err)
 	}
@@ -94,6 +99,7 @@ func setupLobTestTables(t *testing.T) {
 
 func TestClobOnConflict(t *testing.T) {
 	uuid := uuid.New()
+	longStr := strings.Repeat("X", 32768)
 	type test struct {
 		model any
 		fn    func(model any) error
@@ -208,6 +214,23 @@ func TestClobOnConflict(t *testing.T) {
 					Blah: "2",
 					Data: strings.Repeat("X", 32768),
 					UUID: &uuid,
+				},
+			},
+			fn: func(model any) error {
+				return DB.Clauses(clause.OnConflict{
+					UpdateAll: true,
+				}).CreateInBatches(model, 1000).Error
+			},
+		},
+		"SingleBatchNil": {
+			model: []ClobSingleNilModel{
+				{
+					Blah: "1",
+					Data: &longStr,
+				},
+				{
+					Blah: "2",
+					Data: nil,
 				},
 			},
 			fn: func(model any) error {

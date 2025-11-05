@@ -314,17 +314,11 @@ func convertFromOracleToField(value interface{}, field *schema.Field) interface{
 		targetType = field.FieldType.Elem()
 	}
 
-	// When PL/SQL LOBs are returned, unserialize their content
-	if v, ok := value.(godror.Lob); ok {
-		length, err := v.Size()
-		if err != nil {
-			return nil
-		}
-		b := make([]byte, length)
-		converted, err = v.Read(b)
-		if err != nil {
-			return nil
-		}
+	// When PL/SQL LOBs are returned, skip conversion.
+	// LOB addresses are freed by the driver after the query, so we cannot read their content
+	// from the return value. If you need to read stored LOB content, do it in a separate query.
+	if _, ok := value.(godror.Lob); ok {
+		return nil
 	}
 
 	switch targetType {
