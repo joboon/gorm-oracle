@@ -1,6 +1,6 @@
 module github.com/oracle-samples/gorm-oracle
 
-go 1.25.4
+go 1.24.4
 
 require (
 	github.com/godror/godror v0.49.4
